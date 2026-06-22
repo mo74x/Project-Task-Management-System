@@ -4,19 +4,19 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/database';
 import authRoutes from './routes/authRoutes';
 import projectRoutes from './routes/projectRoutes';
+import { errorHandler, notFoundHandler } from './middlewares/errorHandler';
 
 const app: Application = express();
 
 app.use(cors())
 app.use(express.json())
 
-// API Routes
+//API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 
-// Health check route
-app.get('/health', (req, res) => {
-  res.status(200).json({ health: 'ok', message: "API is running" });
-});
+//error handling middleware
+app.use(notFoundHandler)
+app.use(errorHandler)
 
 export default app;

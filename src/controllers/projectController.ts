@@ -28,14 +28,32 @@ export const getProjects = async (req: Request, res: Response): Promise<void> =>
   try {
     // @ts-ignore
     const userId = req.user.id;
+    //query params for pagination
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const skip = (page - 1) * limit;
+    //query params for sorting
+    const sortBy = (req.query.sortBy as string) || 'createdAt';
+    const order = (req.query.order as string)?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    // Fetch projects belonging only to auth user
-    const projects = await projectRepository.find({
+   //findAndCount to get data and total number of records
+   const [projects, total] = await projectRepository.findAndCount({
       where: { user: { id: userId } },
-      order: { createdAt: 'DESC' } //sorting
+      order: { [sortBy]: order },
+      skip,
+      take: limit
     });
-
-    res.status(200).json({ projects });
+    //return data along with pagination metadata
+  res.status(200).json({
+      projects,
+      meta: {
+        totalItems: total,
+        itemCount: projects.length,
+        itemsPerPage: limit,
+        totalPages: Math.ceil(total / limit),
+        currentPage: page,
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching projects', error });
   }
