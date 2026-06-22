@@ -23,7 +23,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     await userRepository.save(newUser);
 
     // Generate JWT token
-    const token = generateToken(newUser.id);
+    const token = generateToken(newUser.id,newUser.role);
 
     res.status(201).json({
       message: 'User registered successfully',
@@ -55,7 +55,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Generate JWT token
-    const token = generateToken(user.id);
+    const token = generateToken(user.id, user.role);
 
     res.status(200).json({
       message: 'Login successful',

@@ -16,12 +16,12 @@ export const comparePassword = async (password: string, hash: string): Promise<b
   return await bcrypt.compare(password, hash);
 };
 
-export const generateToken = (userId: string): string => {
+export const generateToken = (userId: string, role: string): string => {
   if (!JWT_SECRET) {
     throw new Error('JWT_SECRET is not defined');
   }
   const secret: jwt.Secret = JWT_SECRET;
-  return jwt.sign({ id: userId }, secret, {
+  return jwt.sign({ id: userId, role }, secret, {
     expiresIn: JWT_EXPIRES_IN as string | undefined as jwt.SignOptions['expiresIn'],
   });
 };
