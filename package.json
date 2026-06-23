@@ -7,7 +7,12 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "jest"
+    "test": "jest",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:generate": "npm run typeorm -- migration:generate src/migrations/InitialSchema -d src/config/database.ts",
+    "migration:run": "npm run typeorm -- migration:run -d src/config/database.ts",
+    "migration:revert": "npm run typeorm -- migration:revert -d src/config/database.ts",
+    "seed": "ts-node src/scripts/seed.ts"
   },
   "keywords": [],
   "author": "",
