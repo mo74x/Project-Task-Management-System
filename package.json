@@ -1,7 +1,7 @@
 {
   "name": "electro-pi-api",
   "version": "1.0.0",
-  "description": "",
+  "description": "Project & Task Management System RESTful API built with Node.js, Express, TypeScript, and PostgreSQL.",
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
