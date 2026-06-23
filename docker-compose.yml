@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # 1. The PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: electropi_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-electropi_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # 2. The Node.js API Service
+  api:
+    build: .
+    container_name: electropi_api
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-electropi_db}
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_for_electro_pi}
+      - JWT_EXPIRES_IN=1d
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
