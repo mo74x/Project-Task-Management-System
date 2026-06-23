@@ -1,29 +1,22 @@
-import { Request, Response } from 'express';
-import { register } from './authController';
-import { AppDataSource } from '../config/database';
+import { Request, Response, NextFunction } from 'express';
+import { register, login } from './authController';
+import * as authService from '../services/authService';
 
-//mock database configuration
-jest.mock('../config/database', () => ({
-  AppDataSource: {
-    getRepository: jest.fn().mockReturnValue({
-      findOne: jest.fn(),
-      create: jest.fn(),
-      save: jest.fn(),
-    }),
-  },
-}));
+// Mock the service layer
+jest.mock('../services/authService');
 
-describe('Auth Controller - Register', () => {
+describe('Auth Controller', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
+  let mockNext: NextFunction;
   let mockJson: jest.Mock;
   let mockStatus: jest.Mock;
 
   beforeEach(() => {
     mockJson = jest.fn();
     mockStatus = jest.fn().mockReturnValue({ json: mockJson });
-    
-    //fake Express req and res objects
+    mockNext = jest.fn();
+
     mockRequest = {
       body: {
         name: 'Test User',
@@ -31,43 +24,75 @@ describe('Auth Controller - Register', () => {
         password: 'password123',
       },
     };
-    
+
     mockResponse = {
       status: mockStatus,
     };
+
+    jest.clearAllMocks();
   });
 
-  it('should return 400 if user already exists', async () => {
-    const userRepository = AppDataSource.getRepository('User');
-    
-    //simulate finding an existing user
-    (userRepository.findOne as jest.Mock).mockResolvedValue({ id: '1', email: 'test@example.com' });
+  describe('register', () => {
+    it('should return 201 on successful registration', async () => {
+      const serviceResult = {
+        token: 'mock-jwt-token',
+        user: { id: 'uuid-123', name: 'Test User', email: 'test@example.com' },
+      };
 
-    await register(mockRequest as Request, mockResponse as Response);
+      (authService.registerUser as jest.Mock).mockResolvedValue(serviceResult);
 
-    expect(mockStatus).toHaveBeenCalledWith(400);
-    expect(mockJson).toHaveBeenCalledWith({ message: 'User with this email already exists' });
-  });
+      await register(mockRequest as Request, mockResponse as Response, mockNext);
 
-  it('should successfully register a new user', async () => {
-    const userRepository = AppDataSource.getRepository('User');
-    
-    //simulate no user existing
-    (userRepository.findOne as jest.Mock).mockResolvedValue(null);
-    
-    //creating and saving the user
-    const newUser = { id: 'uuid-123', name: 'Test User', email: 'test@example.com', role: 'Member' };
-    (userRepository.create as jest.Mock).mockReturnValue(newUser);
-    (userRepository.save as jest.Mock).mockResolvedValue(newUser);
-
-    await register(mockRequest as Request, mockResponse as Response);
-
-    expect(mockStatus).toHaveBeenCalledWith(201);
-    expect(mockJson).toHaveBeenCalledWith(
-      expect.objectContaining({
+      expect(authService.registerUser).toHaveBeenCalledWith(mockRequest.body);
+      expect(mockStatus).toHaveBeenCalledWith(201);
+      expect(mockJson).toHaveBeenCalledWith({
         message: 'User registered successfully',
-        token: expect.any(String), //expect a token
-      })
-    );
+        ...serviceResult,
+      });
+    });
+
+    it('should call next(error) when service throws', async () => {
+      const error: any = new Error('User with this email already exists');
+      error.statusCode = 400;
+      (authService.registerUser as jest.Mock).mockRejectedValue(error);
+
+      await register(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(error);
+      expect(mockStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('login', () => {
+    it('should return 200 on successful login', async () => {
+      mockRequest.body = { email: 'test@example.com', password: 'password123' };
+      const serviceResult = {
+        token: 'mock-jwt-token',
+        user: { id: 'uuid-123', name: 'Test User', email: 'test@example.com' },
+      };
+
+      (authService.loginUser as jest.Mock).mockResolvedValue(serviceResult);
+
+      await login(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(authService.loginUser).toHaveBeenCalledWith('test@example.com', 'password123');
+      expect(mockStatus).toHaveBeenCalledWith(200);
+      expect(mockJson).toHaveBeenCalledWith({
+        message: 'Login successful',
+        ...serviceResult,
+      });
+    });
+
+    it('should call next(error) when service throws', async () => {
+      mockRequest.body = { email: 'test@example.com', password: 'wrong' };
+      const error: any = new Error('Invalid email or password');
+      error.statusCode = 401;
+      (authService.loginUser as jest.Mock).mockRejectedValue(error);
+
+      await login(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(error);
+      expect(mockStatus).not.toHaveBeenCalled();
+    });
   });
 });

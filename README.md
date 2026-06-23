@@ -58,6 +58,7 @@ A robust, RESTful API for managing users, projects, and nested tasks. Built with
 |---|---|---|---|
 | `GET` | `/api/projects/:projectId/tasks` | Get all tasks for a project | Yes |
 | `POST`| `/api/projects/:projectId/tasks` | Create a task under a project | Yes |
+| `GET` | `/api/projects/:projectId/tasks/:taskId` | Get a specific task by ID | Yes |
 | `PUT` | `/api/projects/:projectId/tasks/:taskId` | Update a specific task | Yes |
 | `DELETE`| `/api/projects/:projectId/tasks/:taskId` | Delete a specific task | Yes |
 
@@ -153,15 +154,15 @@ npm run test
 ```text
 src/
 ├── config/         # Database and Swagger configurations
-├── controllers/    # Route handlers and business logic
-├── entity-manager/ # TypeORM entity management
+├── controllers/    # Route controllers (request parsing, response returning)
 ├── middlewares/    # Express middlewares (auth, validation, errors)
 ├── migrations/     # TypeORM database migrations
 ├── models/         # TypeORM entities (User, Project, Task)
-├── repository/     # Data access layer
 ├── routes/         # Express route definitions
 ├── scripts/        # Utility scripts (e.g., seed.ts)
-├── utils/          # Helper functions and Zod schemas
+├── services/       # Core business logic layer
+├── types/          # Custom TypeScript type definitions
+├── utils/          # Helper functions, authentication utilities, and Zod schemas
 ├── docs/           # Swagger JSON definition
 ├── app.ts          # Express application setup
 └── server.ts       # Server entry point

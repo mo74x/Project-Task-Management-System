@@ -1,55 +1,29 @@
-import { Request, Response } from 'express';
-import { createTask, getTasks, updateTask, deleteTask } from './taskController';
-import { AppDataSource } from '../config/database';
+import { Request, Response, NextFunction } from 'express';
+import { createTask, getTasks, getTaskById, updateTask, deleteTask } from './taskController';
+import * as taskService from '../services/taskService';
 
-jest.mock('../config/database', () => {
-  const mockTaskRepo = {
-    create: jest.fn(),
-    save: jest.fn(),
-    findAndCount: jest.fn(),
-    findOne: jest.fn(),
-    merge: jest.fn(),
-    remove: jest.fn(),
-  };
-
-  const mockProjectRepo = {
-    findOne: jest.fn(),
-  };
-
-  return {
-    AppDataSource: {
-      getRepository: jest.fn((entity: any) => {
-        if (entity === 'Task' || entity?.name === 'Task') return mockTaskRepo;
-        if (entity === 'Project' || entity?.name === 'Project') return mockProjectRepo;
-        return {};
-      }),
-    },
-  };
-});
-
-let mockTaskRepo: any;
-let mockProjectRepo: any;
+// Mock the service layer
+jest.mock('../services/taskService');
 
 describe('Task Controller', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
+  let mockNext: NextFunction;
   let mockJson: jest.Mock;
   let mockStatus: jest.Mock;
 
   beforeEach(() => {
-    mockTaskRepo = AppDataSource.getRepository('Task');
-    mockProjectRepo = AppDataSource.getRepository('Project');
-    
     mockJson = jest.fn();
     mockStatus = jest.fn().mockReturnValue({ json: mockJson });
-    
+    mockNext = jest.fn();
+
     mockRequest = {
       user: { id: 'user-123', role: 'Member' },
       body: {},
-      params: { projectId: 'proj-123' },
+      params: { id: 'proj-123' },
       query: {},
     } as any;
-    
+
     mockResponse = {
       status: mockStatus,
     };
@@ -58,101 +32,123 @@ describe('Task Controller', () => {
   });
 
   describe('createTask', () => {
-    it('should return 404 if the parent project does not exist or user lacks access', async () => {
-      mockProjectRepo.findOne.mockResolvedValue(null);
+    it('should call next(error) when service throws (project not found)', async () => {
+      const error: any = new Error('Project not found or access denied');
+      error.statusCode = 404;
+      (taskService.createTask as jest.Mock).mockRejectedValue(error);
 
-      await createTask(mockRequest as Request, mockResponse as Response);
+      await createTask(mockRequest as Request, mockResponse as Response, mockNext);
 
-      // Verify it checked for project ownership
-      expect(mockProjectRepo.findOne).toHaveBeenCalledWith({
-        where: { id: 'proj-123', user: { id: 'user-123' } }
-      });
-      expect(mockStatus).toHaveBeenCalledWith(404);
-      expect(mockJson).toHaveBeenCalledWith({ message: 'Project not found or access denied' });
+      expect(mockNext).toHaveBeenCalledWith(error);
+      expect(mockStatus).not.toHaveBeenCalled();
     });
 
     it('should successfully create a task if project access is verified', async () => {
-      mockProjectRepo.findOne.mockResolvedValue({ id: 'proj-123' }); // Project found
       mockRequest.body = { title: 'New Task', priority: 'High' };
-      
-      const newTask = { id: 'task-1', ...mockRequest.body, project: { id: 'proj-123' } };
-      
-      mockTaskRepo.create.mockReturnValue(newTask);
-      mockTaskRepo.save.mockResolvedValue(newTask);
 
-      await createTask(mockRequest as Request, mockResponse as Response);
+      const newTask = { id: 'task-1', title: 'New Task', priority: 'High', project: { id: 'proj-123' } };
+      (taskService.createTask as jest.Mock).mockResolvedValue(newTask);
 
+      await createTask(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(taskService.createTask).toHaveBeenCalledWith('proj-123', 'user-123', mockRequest.body);
       expect(mockStatus).toHaveBeenCalledWith(201);
       expect(mockJson).toHaveBeenCalledWith({ message: 'Task created', task: newTask });
     });
   });
 
   describe('getTasks (With Filtering)', () => {
-    it('should apply status and priority filters correctly to the database query', async () => {
-      mockProjectRepo.findOne.mockResolvedValue({ id: 'proj-123' });
-      
-      // Simulate user passing query parameters for filtering
+    it('should pass filter params to the service and return paginated results', async () => {
       mockRequest.query = { status: 'Pending', priority: 'High' };
-      
-      const mockTasks = [{ id: 'task-1', title: 'T1' }];
-      mockTaskRepo.findAndCount.mockResolvedValue([mockTasks, 1]);
 
-      await getTasks(mockRequest as Request, mockResponse as Response);
+      const mockResult = {
+        data: [{ id: 'task-1', title: 'T1' }],
+        meta: { totalItems: 1, itemCount: 1, itemsPerPage: 10, totalPages: 1, currentPage: 1 },
+      };
+      (taskService.getTasksByProject as jest.Mock).mockResolvedValue(mockResult);
 
-      // Verify the dynamic where clause was constructed correctly
-      expect(mockTaskRepo.findAndCount).toHaveBeenCalledWith(
+      await getTasks(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(taskService.getTasksByProject).toHaveBeenCalledWith(
+        'proj-123',
+        'user-123',
         expect.objectContaining({
-          where: {
-            project: { id: 'proj-123' },
-            status: 'Pending',
-            priority: 'High',
-          },
-          order: { createdAt: 'DESC' },
+          status: 'Pending',
+          priority: 'High',
         })
       );
-
       expect(mockStatus).toHaveBeenCalledWith(200);
-      expect(mockJson).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tasks: mockTasks,
-          meta: expect.objectContaining({
-            totalItems: 1,
-          }),
-        })
-      );
+      expect(mockJson).toHaveBeenCalledWith({
+        tasks: mockResult.data,
+        meta: mockResult.meta,
+      });
     });
   });
 
+  describe('getTaskById', () => {
+    it('should return the task if found', async () => {
+      mockRequest.params = { id: 'proj-123', taskId: 'task-1' };
+      const foundTask = { id: 'task-1', title: 'Found Task' };
 
+      (taskService.getTaskById as jest.Mock).mockResolvedValue(foundTask);
+
+      await getTaskById(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(taskService.getTaskById).toHaveBeenCalledWith('proj-123', 'user-123', 'task-1');
+      expect(mockStatus).toHaveBeenCalledWith(200);
+      expect(mockJson).toHaveBeenCalledWith({ task: foundTask });
+    });
+
+    it('should call next(error) if task not found', async () => {
+      mockRequest.params = { id: 'proj-123', taskId: 'unknown-task' };
+      const error: any = new Error('Task not found');
+      error.statusCode = 404;
+
+      (taskService.getTaskById as jest.Mock).mockRejectedValue(error);
+
+      await getTaskById(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(error);
+    });
+  });
 
   describe('updateTask', () => {
-    it('should return 404 if the task itself is not found inside the project', async () => {
-      mockProjectRepo.findOne.mockResolvedValue({ id: 'proj-123' }); // Project exists
-      mockRequest.params = { projectId: 'proj-123', taskId: 'unknown-task' };
-      
-      mockTaskRepo.findOne.mockResolvedValue(null); // Task does not exist
+    it('should call next(error) if the task is not found', async () => {
+      mockRequest.params = { id: 'proj-123', taskId: 'unknown-task' };
+      const error: any = new Error('Task not found');
+      error.statusCode = 404;
 
-      await updateTask(mockRequest as Request, mockResponse as Response);
+      (taskService.updateTask as jest.Mock).mockRejectedValue(error);
 
-      expect(mockTaskRepo.findOne).toHaveBeenCalledWith({
-        where: { id: 'unknown-task', project: { id: 'proj-123' } }
-      });
-      expect(mockStatus).toHaveBeenCalledWith(404);
-      expect(mockJson).toHaveBeenCalledWith({ message: 'Task not found' });
+      await updateTask(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(error);
+      expect(mockStatus).not.toHaveBeenCalled();
+    });
+
+    it('should update and return the task', async () => {
+      mockRequest.params = { id: 'proj-123', taskId: 'task-1' };
+      mockRequest.body = { status: 'Done' };
+      const updatedTask = { id: 'task-1', title: 'T1', status: 'Done' };
+
+      (taskService.updateTask as jest.Mock).mockResolvedValue(updatedTask);
+
+      await updateTask(mockRequest as Request, mockResponse as Response, mockNext);
+
+      expect(taskService.updateTask).toHaveBeenCalledWith('proj-123', 'user-123', 'task-1', mockRequest.body);
+      expect(mockStatus).toHaveBeenCalledWith(200);
+      expect(mockJson).toHaveBeenCalledWith({ message: 'Task updated', task: updatedTask });
     });
   });
 
   describe('deleteTask', () => {
     it('should successfully delete a task', async () => {
-      mockProjectRepo.findOne.mockResolvedValue({ id: 'proj-123' });
-      mockRequest.params = { projectId: 'proj-123', taskId: 'valid-task' };
-      
-      const taskToDelete = { id: 'valid-task', title: 'To Delete' };
-      mockTaskRepo.findOne.mockResolvedValue(taskToDelete);
+      mockRequest.params = { id: 'proj-123', taskId: 'valid-task' };
+      (taskService.deleteTask as jest.Mock).mockResolvedValue(undefined);
 
-      await deleteTask(mockRequest as Request, mockResponse as Response);
+      await deleteTask(mockRequest as Request, mockResponse as Response, mockNext);
 
-      expect(mockTaskRepo.remove).toHaveBeenCalledWith(taskToDelete);
+      expect(taskService.deleteTask).toHaveBeenCalledWith('proj-123', 'user-123', 'valid-task');
       expect(mockStatus).toHaveBeenCalledWith(200);
       expect(mockJson).toHaveBeenCalledWith({ message: 'Task deleted' });
     });
