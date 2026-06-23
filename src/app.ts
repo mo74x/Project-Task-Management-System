@@ -5,11 +5,17 @@ import { connectDB } from './config/database';
 import authRoutes from './routes/authRoutes';
 import projectRoutes from './routes/projectRoutes';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler';
+import swaggerUi from 'swagger-ui-express';
+import swaggerDocument from './docs/swagger.json';
 
 const app: Application = express();
 
 app.use(cors())
 app.use(express.json())
+
+//Swagger docs
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 
 //API routes
 app.use('/api/auth', authRoutes);

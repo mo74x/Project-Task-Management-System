@@ -15,25 +15,17 @@ import { UserRole } from '../models/User';
 
 const router = Router();
 
-//Apply authentication middleware to all routes
-router.use(authenticate);
-
-//Nested task routes
-router.use('/:projectId/tasks', taskRoutes);
-
-//routes
 router.post('/', validate(createProjectSchema), createProject);
 router.get('/', getProjects);
 router.get(
   '/admin/all', 
   authorize([UserRole.ADMIN]), 
   async (req, res) => {
-    //inline controller for admin demonstration
     const { AppDataSource } = await import('../config/database');
     const { Project } = await import('../models/Project');
     
     const allProjects = await AppDataSource.getRepository(Project).find({
-      relations: { user: true } // Show which user owns which project
+      relations: { user: true }
     });
     res.status(200).json({ projects: allProjects });
   }

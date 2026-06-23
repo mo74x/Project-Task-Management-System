@@ -5,7 +5,6 @@ import { validate } from '../middlewares/validate';
 import { createTaskSchema, updateTaskSchema } from '../utils/validators';
 
 const router = Router({ mergeParams: true });
-
 router.use(authenticate);
 
 router.post('/', validate(createTaskSchema), createTask);
